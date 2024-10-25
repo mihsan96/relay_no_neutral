@@ -3,6 +3,7 @@
 #include <LittleFS.h>
 #include <SimplePortal.h>
 #include <ESP8266WiFi.h>
+#include <AutoOTA.h>
 
 #define detect_zero_pin 5
 #define relay_1_pin 6
@@ -15,6 +16,8 @@ bool relay_1_status = false;
 int last_zero;
 bool status = false;
 uint32_t check_wifi_timer;
+uint32_t check_update_timer;
+
 int check_wifi_counter = 0;
 struct WIFIStruct
 {
@@ -25,6 +28,7 @@ struct WIFIStruct
 WIFIStruct wifi;
 
 FileData data(&LittleFS, "/wifi.dat", 'B', &wifi, sizeof(wifi));
+AutoOTA ota("0.1", "mihsan96/relay_no_neutral");
 
 IRAM_ATTR void DetectorZeroHandler()
 {
@@ -121,5 +125,13 @@ void loop()
   {
     digitalWrite(relay_1_pin, !relay_1_status);
     flag_zero = false;
+  }
+  if (millis() - check_update_timer >= 5000){
+    String ver, notes;
+    if (ota.checkUpdate(&ver, &notes)) {
+        Serial.println(ver);
+        Serial.println(notes);
+        ota.update();
+    }
   }
 }
