@@ -5,9 +5,37 @@ static ESP8266WebServer _SP_server(80);
 #else
 static WebServer _SP_server(80);
 #endif
+char *html_char;
 
+// const char SP_connect_page[] PROGMEM = R"rawliteral(
+// <!DOCTYPE HTML><html><head>
+// <meta name="viewport" content="width=device-width, initial-scale=1">
+// </head><body>
+// <style type="text/css">
+//     input[type="text"] {margin-bottom:8px;font-size:20px;}
+//     input[type="submit"] {width:180px; height:60px;margin-bottom:8px;font-size:20px;}
+// </style>
+// <center>
+// <h3>WiFi settings</h3>
+// <form action="/connect" method="POST">
+//     <input type="text" name="ssid" placeholder="SSID">
+//     <input type="text" name="pass" placeholder="Pass">
+//     <input type="submit" value="Submit">
+// </form>
+// <h3>Switch WiFi mode</h3>
+// <form action="/ap" method="POST">
+//     <input type="submit" value="Access Point">
+// </form>
+// <form action="/local" method="POST">
+//     <input type="submit" value="Local Mode">
+// </form>
+// <form action="/exit" method="POST">
+//     <input type="submit" value="Exit Portal">
+// </form>
+// </center>
+// </body></html>)rawliteral";
 
-String html()
+String update_html()
 {
   String html;
   html = R"rawliteral(<!DOCTYPE HTML>
@@ -29,20 +57,11 @@ String html()
     </style>
     <center>
         <h3>WiFi settings</h3>)rawliteral";
-  int numberOfNetworks = WiFi.scanNetworks();
 
-  for (int i = 0; i < numberOfNetworks; i++)
-  {
-    html += "<dir><button class=\"wifi_ssid_button\" data-text=\"";
-    html += WiFi.SSID(i);
-    html += "\">";
-    html += WiFi.SSID(i);
-    html += "</button></dir>";
-  }
   html += R"rawliteral(
         <form action="/connect" method="POST">
-            
-            <input type="text" name="ssid" placeholder="SSID" id="ssid">
+            <button class="wifi_ssid_button" data-text=""></button>
+            <input type="text" name="ssid" placeholder="SSID" class="ssid">
             <input type="text" name="pass" placeholder="Pass">
             <input type="submit" value="Submit">
         </form>
@@ -58,8 +77,8 @@ String html()
         </form>
     </center>
     <script>
-        const buttons = document.querySelectorAll('.wifi_ssid_button');
-        const input = document.getElementById('ssid');
+        const buttons = document.querySelectorAll('.text-button');
+        const input = document.getElementById('myInput');
 
         buttons.forEach(button => {
             button.addEventListener('click', function () {
@@ -69,6 +88,7 @@ String html()
     </script>
 </body>
 </html>)rawliteral";
+  // html.toCharArray(html_char, html.length());
   return html;
 }
 static bool _SP_started = false;
@@ -102,7 +122,7 @@ void SP_handleExit()
 
 void portalStart()
 {
-  // update_html();
+  update_html();
   WiFi.softAPdisconnect();
   WiFi.disconnect();
   IPAddress apIP(SP_AP_IP);
@@ -113,7 +133,7 @@ void portalStart()
   _SP_dnsServer.start(53, "*", apIP);
 
   _SP_server.onNotFound([]()
-                        { _SP_server.send(200, "text/html", html()); });
+                        { _SP_server.send(200, "text/html", update_html()); });
   _SP_server.on("/connect", HTTP_POST, SP_handleConnect);
   _SP_server.on("/ap", HTTP_POST, SP_handleAP);
   _SP_server.on("/local", HTTP_POST, SP_handleLocal);
