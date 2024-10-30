@@ -1,137 +1,176 @@
 #include <Arduino.h>
 #include <FileData.h>
 #include <LittleFS.h>
-#include <SimplePortal.h>
 #include <ESP8266WiFi.h>
-#include <AutoOTA.h>
+// #include <AutoOTA.h>
+#include <WiFiConnector.h>
+#include <ESP8266WebServer.h>
 
-#define detect_zero_pin 5
-#define relay_1_pin 6
-#define button_1_pin 7
+#define detect_zero_pin D1 // 5
+#define relay_1_pin D5     // 14
+#define button_1_pin D6    // 12
 #define wifi_check_timeout 5000
-#define check_wifi_counter_max 12
+#define check_wifi_counter_max 2
 
-bool flag_zero = false;
-bool relay_1_status = false;
-int last_zero;
-bool status = false;
-uint32_t check_wifi_timer;
+volatile bool relay_1_status = true;
+volatile bool pressed_flag;
+
+uint32_t check_button_timmer;
 uint32_t check_update_timer;
+ESP8266WebServer server(80);
 
-int check_wifi_counter = 0;
 struct WIFIStruct
 {
   char ssid[32];
   char pass[32];
 };
 
-WIFIStruct wifi;
-
-FileData data(&LittleFS, "/wifi.dat", 'B', &wifi, sizeof(wifi));
-AutoOTA ota("0.1", "mihsan96/relay_no_neutral");
-
-IRAM_ATTR void DetectorZeroHandler()
+struct MQTTStruct
 {
-  if (relay_1_status)
+  char server[32];
+  int port;
+  char login[32];
+  char pass[32];
+};
+
+WIFIStruct wifi;
+MQTTStruct mqtt;
+
+FileData wifi_data(&LittleFS, "/wifi.dat", 'B', &wifi, sizeof(wifi));
+FileData mqtt_data(&LittleFS, "/mqtt.dat", 'B', &mqtt, sizeof(mqtt));
+// AutoOTA ota("0.01", "mihsan96/relay_no_neutral");
+
+String html()
+{
+  String html;
+  html = R"rawliteral(<!DOCTYPE HTML>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
+    <style type="text/css">
+        input[type="text"] {
+            margin-bottom: 8px;
+            font-size: 20px;
+        }
+
+        input[type="submit"] {
+            width: 180px;
+            height: 60px;
+            margin-bottom: 8px;
+            font-size: 20px;
+        }
+    </style>
+    <center>
+        <h3>WiFi settings</h3>)rawliteral";
+  int numberOfNetworks = WiFi.scanNetworks();
+
+  for (int i = 0; i < numberOfNetworks; i++)
   {
-    flag_zero = true;
-    last_zero = millis();
-    digitalWrite(relay_1_pin, relay_1_status);
+    html += "<dir><button class=\"wifi_ssid_button\" data-text=\"";
+    html += WiFi.SSID(i);
+    html += "\">";
+    html += WiFi.SSID(i);
+    html += "</button></dir>";
   }
+  html += R"rawliteral(
+        <form action="/connect" method="POST">
+            <input type="text" name="wifi_ssid" placeholder="WiFi SSID" id="ssid" value="">
+            <input type="password" name="wifi_pass" placeholder="WiFi Password" value="">
+            <input type="text" name="mqtt_server" placeholder="MQTT Server" value="">
+            <input type="number" name="mqtt_port" placeholder="MQTT Port" value="1883">
+            <input type="text" name="mqtt_login" placeholder="MQTT Login" value="">
+            <input type="password" name="mqtt_pass" placeholder="MQTT Password" value="">
+            <input type="submit" value="Submit">
+        </form>
+        </center>
+    <script>
+        const buttons = document.querySelectorAll('.wifi_ssid_button');
+        const input = document.getElementById('ssid');
+
+        buttons.forEach(button => {
+            button.addEventListener('click', function () {
+                input.value = this.getAttribute('data-text');
+            });
+        });
+    </script>
+</body>
+</html>)rawliteral";
+  return html;
+}
+
+void handleConnect()
+{
+  server.arg("wifi_ssid").toCharArray(wifi.ssid, sizeof(wifi.ssid));
+  server.arg("wifi_pass").toCharArray(wifi.pass, sizeof(wifi.pass));
+  server.arg("mqtt_server").toCharArray(mqtt.server, sizeof(mqtt.server));
+  mqtt.port = server.arg("mqtt_port").toInt();
+  server.arg("mqtt_login").toCharArray(mqtt.login, sizeof(mqtt.login));
+  server.arg("mqtt_pass").toCharArray(mqtt.pass, sizeof(mqtt.pass));
+
+  WiFiConnector.connect(wifi.ssid, wifi.pass);
+
+  wifi_data.updateNow();
+  mqtt_data.updateNow();
+}
+void handleSendIndex()
+{
+  server.send(200, "text/html", html());
+  Serial.println("send index");
+}
+
+void handleErrorConnect()
+{
+  Serial.println("connect error");
+}
+
+void handleConnected()
+{
+  Serial.println("connect OK");
 }
 
 IRAM_ATTR void SwitchHandler()
 {
-  relay_1_status = !relay_1_status;
-  digitalWrite(relay_1_pin, relay_1_status);
+  pressed_flag = true;
+  check_button_timmer = millis();
 }
 
 void setup()
 {
-  Serial.begin(9600);
+  Serial.begin(74880);
   LittleFS.begin();
-  data.read();
+  WiFiConnector.connect(wifi.ssid, wifi.pass);
+  WiFiConnector.onConnect(handleConnected);
+  WiFiConnector.onError(handleErrorConnect);
+  server.on("/", HTTP_GET, handleSendIndex);
+  server.on("/connect", HTTP_POST, handleConnect);
+  server.begin();
 
-  if (wifi.ssid && wifi.ssid[0])
-  {
-    WiFi.begin(wifi.ssid, wifi.pass);
-    check_wifi_timer = millis();
-  }
-  else
-  {
-    portalStart();
-  }
-
-  pinMode(button_1_pin, INPUT);
+  pinMode(button_1_pin, INPUT_PULLUP);
   pinMode(relay_1_pin, OUTPUT);
-  pinMode(detect_zero_pin, INPUT);
 
-  attachInterrupt(detect_zero_pin, DetectorZeroHandler, RISING);
   attachInterrupt(button_1_pin, SwitchHandler, CHANGE);
+  digitalWrite(relay_1_pin, true);
 }
 
 void loop()
 {
-  Serial.println(wifi.ssid);
-  data.tick();
-  if (portalTick())
+
+  WiFiConnector.tick();
+  server.handleClient();
+
+  // wifi_data.tick();
+  // mqtt_data.tick();
+
+  if (pressed_flag and millis() - check_button_timmer > 10)
   {
-    if (portalStatus() == SP_SUBMIT)
-    {
-      strcpy(wifi.ssid, portalCfg.SSID);
-      strcpy(wifi.pass, portalCfg.pass);
-      WiFi.begin(wifi.ssid, wifi.pass);
-    }
+    Serial.println("swiched");
+    relay_1_status = !relay_1_status;
+    digitalWrite(relay_1_pin, relay_1_status);
+    pressed_flag = false;
   }
-  else if (millis() - check_wifi_timer >= wifi_check_timeout)
-  {
-    check_wifi_timer = millis();
-    switch (WiFi.status())
-    {
-    case WL_CONNECT_FAILED:
-    case WL_NO_SSID_AVAIL:
-    case WL_WRONG_PASSWORD:
-    case WL_IDLE_STATUS:
-      portalStart();
-      strcpy(wifi.ssid, "");
-      strcpy(wifi.pass, "");
-      break;
-    case WL_CONNECTED:
-      strcpy(wifi.ssid, portalCfg.SSID);
-      strcpy(wifi.pass, portalCfg.pass);
-      data.updateNow();
-    case WL_CONNECTION_LOST:
-    case WL_DISCONNECTED:
-      if (check_wifi_counter < check_wifi_counter_max)
-      {
-        WiFi.begin(wifi.ssid, wifi.pass);
-        check_wifi_counter += 1;
-        break;
-      }
-      else
-      {
-        portalStart();
-        strcpy(wifi.ssid, "");
-        strcpy(wifi.pass, "");
-        check_wifi_counter = 0;
-        break;
-      }
-    case WL_NO_SHIELD:
-    case WL_SCAN_COMPLETED:
-      break;
-    }
-  }
-  if (relay_1_status && flag_zero && (millis() - last_zero >= 8))
-  {
-    digitalWrite(relay_1_pin, !relay_1_status);
-    flag_zero = false;
-  }
-  if (millis() - check_update_timer >= 5000){
-    String ver, notes;
-    if (ota.checkUpdate(&ver, &notes)) {
-        Serial.println(ver);
-        Serial.println(notes);
-        ota.update();
-    }
-  }
+  // String ver, notes;
+  // if (ota.checkUpdate(&ver, &notes)) {
+  //   Serial.println(ver);
+  //   Serial.println(notes);
+  // }
 }
