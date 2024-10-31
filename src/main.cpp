@@ -8,7 +8,7 @@
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 
-#define light_1_pin D5 // 14
+#define light_1_pin LED_BUILTIN//D5 // 14
 #define light_2_pin D1 // 5
 
 #define button_1_pin D6 // 12
@@ -151,7 +151,7 @@ void AutoDiscovery()
 {
   char discover_1[256];
   json_1["name"] = String("Light_" + mqtt.id + "_1");
-  json_1["command_topic"] = String("light/" + mqtt.id + "/1");
+  json_1["command_topic"] = String(def_topic_1);
   json_1["payload_on"] = "1";
   json_1["payload_off"] = "0";
   json_1["retain"] = true;
@@ -160,7 +160,7 @@ void AutoDiscovery()
 
   char discover_2[256];
   json_2["name"] = String("Light_" + mqtt.id + "_2");
-  json_2["command_topic"] = String("light/" + mqtt.id + "/2");
+  json_2["command_topic"] = String(def_topic_2);
   json_2["payload_on"] = "1";
   json_2["payload_off"] = "0";
   json_2["retain"] = true;
