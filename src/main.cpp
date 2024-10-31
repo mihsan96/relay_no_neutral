@@ -6,6 +6,7 @@
 #include <WiFiConnector.h>
 #include <ESP8266WebServer.h>
 #include <PubSubClient.h>
+#include <ArduinoJson.h>
 
 #define light_1_pin D5 // 14
 #define light_2_pin D1 // 5
@@ -16,6 +17,9 @@
 #define wifi_check_timeout 5000
 #define mqtt_check_timeout 5000
 #define button_timeout 100
+
+#define def_topic_1 String("light/" + mqtt.id + "/1").c_str()
+#define def_topic_2 String("light/" + mqtt.id + "/2").c_str()
 
 volatile bool light_1_status = false;
 volatile bool light_2_status = false;
@@ -29,6 +33,9 @@ uint32_t check_button_timmer_2 = 0;
 uint32_t check_update_timer = 0;
 uint32_t check_wifi_timer = 0;
 uint32_t check_mqtt_timer = 0;
+
+JsonDocument json_1;
+JsonDocument json_2;
 
 struct WIFIStruct
 {
@@ -140,6 +147,30 @@ String success_html()
   return html;
 }
 
+void AutoDiscovery()
+{
+  char discover_1[256];
+  json_1["name"] = String("Light_" + mqtt.id + "_1");
+  json_1["command_topic"] = String("light/" + mqtt.id + "/1");
+  json_1["payload_on"] = "1";
+  json_1["payload_off"] = "0";
+  json_1["retain"] = true;
+  json_1["unique_id"] = String(mqtt.id + "_1");
+  serializeJson(json_1, discover_1);
+
+  char discover_2[256];
+  json_2["name"] = String("Light_" + mqtt.id + "_2");
+  json_2["command_topic"] = String("light/" + mqtt.id + "/2");
+  json_2["payload_on"] = "1";
+  json_2["payload_off"] = "0";
+  json_2["retain"] = true;
+  json_2["unique_id"] = String(mqtt.id + "_2");
+  serializeJson(json_2, discover_2);
+
+  client.publish(String("homeassistant/light/" + mqtt.id + "_1" + "/config").c_str(), discover_1);
+  client.publish(String("homeassistant/light/" + mqtt.id + "_2" + "/config").c_str(), discover_2);
+}
+
 void MQTTReconnect()
 {
   if (String(mqtt.server).length() and WiFi.isConnected() and (millis() - check_mqtt_timer > mqtt_check_timeout))
@@ -148,8 +179,16 @@ void MQTTReconnect()
     if (client.connect(mqtt.id.c_str(), mqtt.login, mqtt.pass))
     {
       Serial.println(client.state());
-      client.subscribe(String("light/" + mqtt.id + "/1").c_str());
-      client.subscribe(String("light/" + mqtt.id + "/2").c_str());
+      Serial.println(def_topic_1);
+      Serial.println(def_topic_2);
+
+      client.subscribe(def_topic_1);
+      client.subscribe(def_topic_2);
+
+      AutoDiscovery();
+
+      client.publish(def_topic_1, String(light_1_status).c_str());
+      client.publish(def_topic_2, String(light_2_status).c_str());
     }
   }
 }
@@ -176,6 +215,7 @@ void handleConnect()
   wifi_data.updateNow();
   mqtt_data.updateNow();
 }
+
 void handleSendIndex()
 {
   server.send(200, "text/html", html());
@@ -202,6 +242,7 @@ IRAM_ATTR void SwitchHandler2()
 {
   pressed_flag_2 = true;
   check_button_timmer_2 = millis();
+  Serial.println(111);
 }
 
 void WiFiReconnect()
@@ -215,13 +256,20 @@ void WiFiReconnect()
 
 void MQTTHandler(char *topic, byte *payload, unsigned int length)
 {
-  if (topic == String("light/" + mqtt.id + "/1").c_str())
+  String Payload = "";
+  for (unsigned int i = 0; i < length; i++)
+    Payload += (char)payload[i];
+  Serial.println(Payload);
+  Serial.println(topic);
+
+  if (String(topic) == def_topic_1 && Payload != String(light_1_status))
   {
     SwitchHandler1();
   }
-  else if (topic == String("light/" + mqtt.id + "/2").c_str())
+  else if (String(topic) == def_topic_2 && Payload != String(light_2_status))
   {
     SwitchHandler2();
+    Serial.println(213);
   }
 }
 
@@ -229,13 +277,18 @@ void setup()
 {
   Serial.begin(74880);
   LittleFS.begin();
+
+  WiFi.setHostname(String(mqtt.id).c_str());
+
   wifi_data.read();
   mqtt_data.read();
 
   WiFiConnector.connect(wifi.ssid, wifi.pass);
   WiFiConnector.onConnect(handleConnected);
   WiFiConnector.onError(handleErrorConnect);
+
   Serial.println(String(mqtt.server).length());
+
   if (String(mqtt.server).length())
   {
     client.setServer(mqtt.server, mqtt.port);
@@ -280,7 +333,7 @@ void loop()
     Serial.println("swiched_1");
     light_1_status = !light_1_status;
     digitalWrite(light_1_pin, light_1_status);
-    client.publish(String("light/" + mqtt.id + "/1").c_str(), String(light_1_status).c_str());
+    client.publish(def_topic_1, String(light_1_status).c_str());
     pressed_flag_1 = false;
   }
 
@@ -289,7 +342,7 @@ void loop()
     Serial.println("swiched_2");
     light_2_status = !light_2_status;
     digitalWrite(light_2_pin, light_2_status);
-    client.publish(String("light/" + mqtt.id + "/2").c_str(), String(light_2_status).c_str());
+    client.publish(def_topic_2, String(light_2_status).c_str());
     pressed_flag_2 = false;
   }
   // String ver, notes;
