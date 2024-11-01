@@ -342,7 +342,7 @@ void loop()
 
   if (pressed_flag_1 and (millis() - check_button_timmer_1 > button_timeout))
   {
-    Serial.println("swiched_1");
+    Serial.println("swiched_1 ");
     light_1_status = !light_1_status;
     digitalWrite(light_1_pin, light_1_status);
     mqtt_client.publish(def_topic_1_state, String(light_1_status).c_str());
@@ -351,7 +351,7 @@ void loop()
 
   if (pressed_flag_2 and (millis() - check_button_timmer_2 > button_timeout))
   {
-    Serial.println("swiched_2");
+    Serial.println("swiched_2 ");
     light_2_status = !light_2_status;
     digitalWrite(light_2_pin, light_2_status);
     mqtt_client.publish(def_topic_2_state, String(light_2_status).c_str());
