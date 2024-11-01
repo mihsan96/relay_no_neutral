@@ -355,6 +355,7 @@ void handleUpdateNow()
     </center>
 </body>
 </html>)rawliteral";
+  server.send(200, "text/html", html_update);
 }
 void setup()
 {
