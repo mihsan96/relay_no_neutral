@@ -2,24 +2,28 @@
 #include <FileData.h>
 #include <LittleFS.h>
 #include <ESP8266WiFi.h>
-// #include <AutoOTA.h>
+#include <AutoOTA.h>
 #include <WiFiConnector.h>
 #include <ESP8266WebServer.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 
-#define light_1_pin LED_BUILTIN//D5 // 14
-#define light_2_pin D1 // 5
+#define light_1_pin LED_BUILTIN // D5 // 14
+#define light_2_pin D1          // 5
 
 #define button_1_pin D6 // 12
 #define button_2_pin D2 // 4
 
 #define wifi_check_timeout 5000
+#define update_check_timeout 5000
 #define mqtt_check_timeout 5000
 #define button_timeout 100
 
 #define def_topic_1 String("light/" + mqtt.id + "/1").c_str()
 #define def_topic_2 String("light/" + mqtt.id + "/2").c_str()
+
+#define def_topic_1_state String("light/" + mqtt.id + "/1/state").c_str()
+#define def_topic_2_state String("light/" + mqtt.id + "/2/state").c_str()
 
 volatile bool light_1_status = false;
 volatile bool light_2_status = false;
@@ -57,7 +61,7 @@ MQTTStruct mqtt;
 
 FileData wifi_data(&LittleFS, "/wifi.dat", 'B', &wifi, sizeof(wifi));
 FileData mqtt_data(&LittleFS, "/mqtt.dat", 'A', &mqtt, sizeof(mqtt));
-// AutoOTA ota("0.01", "mihsan96/relay_no_neutral");
+AutoOTA ota("0.2", "mihsan96/relay_no_neutral");
 ESP8266WebServer server(80);
 
 WiFiClient espClient;
@@ -155,6 +159,9 @@ void AutoDiscovery()
   json_1["payload_on"] = "1";
   json_1["payload_off"] = "0";
   json_1["retain"] = true;
+  json_1["state_topic"] = String(def_topic_1_state);
+  json_1["state_on"] = "1";
+  json_1["state_off"] = "0";
   json_1["unique_id"] = String(mqtt.id + "_1");
   serializeJson(json_1, discover_1);
 
@@ -164,6 +171,9 @@ void AutoDiscovery()
   json_2["payload_on"] = "1";
   json_2["payload_off"] = "0";
   json_2["retain"] = true;
+  json_1["state_topic"] = String(def_topic_2_state);
+  json_1["state_on"] = "1";
+  json_1["state_off"] = "0";
   json_2["unique_id"] = String(mqtt.id + "_2");
   serializeJson(json_2, discover_2);
 
@@ -269,7 +279,6 @@ void MQTTHandler(char *topic, byte *payload, unsigned int length)
   else if (String(topic) == def_topic_2 && Payload != String(light_2_status))
   {
     SwitchHandler2();
-    Serial.println(213);
   }
 }
 
@@ -315,10 +324,23 @@ void setup()
 
 void loop()
 {
-
+  Serial.println(ota.version());
+  Serial.println("Updated!");
   if (!WiFiConnector.tick())
   {
     WiFiReconnect();
+  }
+  else
+  {
+    String ver, notes;
+
+    if ((millis() - check_update_timer > update_check_timeout) && ota.checkUpdate(&ver, &notes))
+    {
+      check_update_timer = millis();
+      Serial.println(ver);
+      Serial.println(notes);
+      ota.updateNow();
+    }
   }
 
   if (!client.loop())
@@ -333,7 +355,7 @@ void loop()
     Serial.println("swiched_1");
     light_1_status = !light_1_status;
     digitalWrite(light_1_pin, light_1_status);
-    client.publish(def_topic_1, String(light_1_status).c_str());
+    client.publish(def_topic_1_state, String(light_1_status).c_str());
     pressed_flag_1 = false;
   }
 
@@ -342,12 +364,7 @@ void loop()
     Serial.println("swiched_2");
     light_2_status = !light_2_status;
     digitalWrite(light_2_pin, light_2_status);
-    client.publish(def_topic_2, String(light_2_status).c_str());
+    client.publish(def_topic_2_state, String(light_2_status).c_str());
     pressed_flag_2 = false;
   }
-  // String ver, notes;
-  // if (ota.checkUpdate(&ver, &notes)) {
-  //   Serial.println(ver);
-  //   Serial.println(notes);
-  // }
 }
