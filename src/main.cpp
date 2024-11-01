@@ -15,9 +15,11 @@
 #define button_2_pin D2 // 4
 
 #define wifi_check_timeout 5000
-#define update_check_timeout 600000
+// #define update_check_timeout 600000
 #define mqtt_check_timeout 5000
 #define button_timeout 100
+
+int update_check_timeout = 60000;
 
 #define def_topic_1 String("light/" + mqtt.id + "/1").c_str()
 #define def_topic_2 String("light/" + mqtt.id + "/2").c_str()
@@ -56,11 +58,20 @@ struct MQTTStruct
   char pass[32];
 };
 
+struct UpdateStruct
+{
+  long unsigned timeout = 600000;
+  bool auto_update = true;
+};
+
 WIFIStruct wifi;
 MQTTStruct mqtt;
+UpdateStruct update;
 
 FileData wifi_data(&LittleFS, "/wifi.dat", 'B', &wifi, sizeof(wifi));
 FileData mqtt_data(&LittleFS, "/mqtt.dat", 'A', &mqtt, sizeof(mqtt));
+FileData update_data(&LittleFS, "/update.dat", 'C', &update, sizeof(update));
+
 AutoOTA ota("1.01", "mihsan96/relay_no_neutral");
 ESP8266WebServer server(80);
 
@@ -89,7 +100,7 @@ String html()
     </style>
     <center>
         <h3>)rawliteral";
-  html += "Версия - ";
+  html += "Version - ";
   html += String(ota.version());
   html += "</h3>";
   int numberOfNetworks = WiFi.scanNetworks();
@@ -111,6 +122,20 @@ String html()
             <div><input type="text" name="mqtt_login" placeholder="MQTT Login" value=""></div>
             <div><input type="password" name="mqtt_pass" placeholder="MQTT Password" value=""></div>
             <input type="submit" value="Submit">
+        </form>
+        <form action="/save_update" method="POST">)rawliteral";
+
+  html += "<div><input type=\"text\" name=\"timeout\" placeholder=\"Update timeout in miliseconds\" value=\"";
+  html += String(update.timeout);
+  html += "\"></div>";
+  html += "<div>Auto update <input type=\"checkbox\" name=\"auto_update\"";
+  if (update.auto_update)
+    html += "checked";
+  html += "></div>";
+  html += R"rawliteral(<input type="submit" value="Save"></form>
+  <form action="/update_now" method="POST">
+            
+            <input type="submit" value="Update now!">
         </form>
         </center>
     <script>
@@ -285,6 +310,52 @@ void MQTTHandler(char *topic, byte *payload, unsigned int length)
   }
 }
 
+void handleUpdate()
+{
+  update.timeout = server.arg("timeout").toInt();
+  update.auto_update = server.arg("auto_update").toInt();
+
+  update_data.updateNow();
+
+  server.sendHeader("Location", String("/"), true);
+  server.send(302, "text/plain", "");
+}
+
+void handleUpdateNow()
+{
+  String html_update = R"rawliteral(<!DOCTYPE HTML>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
+    <style type="text/css">
+        input[type="text"] {
+            margin-bottom: 8px;
+            font-size: 20px;
+        }
+
+        input[type="submit"] {
+            width: 180px;
+            height: 60px;
+            margin-bottom: 8px;
+            font-size: 20px;
+        }
+    </style>
+    <center>
+        <h3>)rawliteral";
+  if (ota.checkUpdate())
+  {
+    html_update += "Find update. Updating...";
+    ota.update();
+  }
+  else
+  {
+    html_update += "No update find. Do nothing.";
+  }
+  html_update += R"rawliteral(</h3>
+    </center>
+</body>
+</html>)rawliteral";
+}
 void setup()
 {
   Serial.begin(74880);
@@ -294,6 +365,7 @@ void setup()
 
   wifi_data.read();
   mqtt_data.read();
+  update_data.read();
 
   WiFiConnector.connect(wifi.ssid, wifi.pass);
   WiFiConnector.onConnect(handleConnected);
@@ -308,6 +380,9 @@ void setup()
 
   server.on("/", HTTP_GET, handleSendIndex);
   server.on("/connect", HTTP_POST, handleConnect);
+  server.on("/save_update", HTTP_POST, handleUpdate);
+  server.on("/update_now", HTTP_POST, handleUpdateNow);
+
   server.begin();
 
   pinMode(button_1_pin, INPUT);
@@ -330,10 +405,11 @@ void loop()
     WiFiReconnect();
   }
 
-  if (WiFiConnector.connected() && (millis() - check_update_timer > update_check_timeout) && ota.checkUpdate())
+  if (update.auto_update && WiFiConnector.connected() && (millis() - check_update_timer > update.timeout) && ota.checkUpdate())
   {
     ota.update();
   }
+
   ota.tick();
 
   if (!mqtt_client.loop())
