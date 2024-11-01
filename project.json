@@ -1,14 +1,14 @@
 {
     "name": "relay_no_neutral",
     "about": "",
-    "version": "0.2",
+    "version": "1.0",
     "notes": "test",
     "builds": [
         {
             "chipFamily": "ESP8266",
             "parts": [
                 {
-                    "path": "https://github.com/mihsan96/relay_no_neutral/releases/latest/download/firmware.bin",
+                    "path": "https://raw.githubusercontent.com/mihsan96/relay_no_neutral/main/firmware.bin",
                     "offset": 0
                 }
             ]
