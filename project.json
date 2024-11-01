@@ -8,7 +8,7 @@
             "chipFamily": "ESP8266",
             "parts": [
                 {
-                    "path": "https://github.com/mihsan96/relay_no_neutral/releases/latest/download/firmware.bin",
+                    "path": "https://raw.githubusercontent.com/mihsan96/relay_no_neutral/main/firmware.bin",
                     "offset": 0
                 }
             ]
