@@ -1,7 +1,7 @@
 {
     "name": "relay_no_neutral",
     "about": "",
-    "version": "1.02",
+    "version": "1.03",
     "notes": "test",
     "builds": [
         {
