@@ -61,7 +61,7 @@ MQTTStruct mqtt;
 
 FileData wifi_data(&LittleFS, "/wifi.dat", 'B', &wifi, sizeof(wifi));
 FileData mqtt_data(&LittleFS, "/mqtt.dat", 'A', &mqtt, sizeof(mqtt));
-AutoOTA ota("1.0", "mihsan96/relay_no_neutral");
+AutoOTA ota("1.01", "mihsan96/relay_no_neutral");
 ESP8266WebServer server(80);
 
 WiFiClient espClient;
@@ -88,7 +88,10 @@ String html()
         }
     </style>
     <center>
-        <h3>WiFi settings</h3>)rawliteral";
+        <h3>)rawliteral";
+  html += "Версия - ";
+  html += String(ota.version());
+  html += "</h3>";
   int numberOfNetworks = WiFi.scanNetworks();
 
   for (int i = 0; i < numberOfNetworks; i++)
