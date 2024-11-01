@@ -72,7 +72,7 @@ FileData wifi_data(&LittleFS, "/wifi.dat", 'B', &wifi, sizeof(wifi));
 FileData mqtt_data(&LittleFS, "/mqtt.dat", 'A', &mqtt, sizeof(mqtt));
 FileData update_data(&LittleFS, "/update.dat", 'C', &update, sizeof(update));
 
-AutoOTA ota("1.04", "mihsan96/relay_no_neutral");
+AutoOTA ota("1.05", "mihsan96/relay_no_neutral");
 ESP8266WebServer server(80);
 
 WiFiClient espClient;
@@ -353,6 +353,7 @@ void handleUpdateNow()
   }
   html_update += R"rawliteral(</h3>
     </center>
+    <a href="/">To general</a>
 </body>
 </html>)rawliteral";
   server.send(200, "text/html", html_update);
